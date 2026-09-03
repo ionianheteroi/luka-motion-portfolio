@@ -31,11 +31,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const updateActiveNav = () => {
     const marker = window.scrollY + 180;
-    let current = sections[0]?.id || 'home';
+    const pageBottom = Math.ceil(window.scrollY + window.innerHeight);
+    const atPageEnd = pageBottom >= document.documentElement.scrollHeight - 2;
+    let current = atPageEnd
+      ? sections[sections.length - 1]?.id
+      : sections[0]?.id || 'home';
 
-    sections.forEach((section) => {
-      if (marker >= section.offsetTop) current = section.id;
-    });
+    if (!atPageEnd) {
+      sections.forEach((section) => {
+        if (marker >= section.offsetTop) current = section.id;
+      });
+    }
 
     navLinks.forEach((link) => {
       const active = link.getAttribute('href') === `#${current}`;
