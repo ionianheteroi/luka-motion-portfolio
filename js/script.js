@@ -1,180 +1,140 @@
 document.addEventListener('DOMContentLoaded', () => {
-  /* ───── Lenis smooth scroll ───── */
-  const lenis = new Lenis({
-    duration: 1.2,
-    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-    smoothWheel: true,
-  });
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const navLinks = [...document.querySelectorAll('.nav-link')];
+  const sections = [...document.querySelectorAll('section[id], footer[id]')];
 
-  // Sync Lenis with GSAP's ticker
-  lenis.on('scroll', ScrollTrigger.update);
-  gsap.ticker.add((time) => lenis.raf(time * 1000));
-  gsap.ticker.lagSmoothing(0);
+  /* Keep navigation useful even when animation libraries are unavailable. */
+  let lenis = null;
+  const animationToolsReady = Boolean(window.Lenis && window.gsap && window.ScrollTrigger);
 
-  // Make nav anchor clicks use Lenis
-  document.querySelectorAll('.nav-link').forEach((link) => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
+  if (animationToolsReady && !reducedMotion) {
+    lenis = new window.Lenis({
+      duration: 1.05,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+    });
+
+    lenis.on('scroll', window.ScrollTrigger.update);
+    window.gsap.ticker.add((time) => lenis.raf(time * 1000));
+    window.gsap.ticker.lagSmoothing(0);
+  }
+
+  navLinks.forEach((link) => {
+    link.addEventListener('click', (event) => {
+      if (!lenis) return;
       const target = document.querySelector(link.getAttribute('href'));
-      if (target) lenis.scrollTo(target, { offset: 0 });
+      if (!target) return;
+      event.preventDefault();
+      lenis.scrollTo(target, { offset: -80 });
     });
   });
-
-  /* ───── Register GSAP plugin ───── */
-  gsap.registerPlugin(ScrollTrigger);
-
-  /* ───── Nav bar — fade in + slide down on load ───── */
-  gsap.fromTo(
-    '.nav',
-    { autoAlpha: 0, y: -20 },
-    { autoAlpha: 1, y: 0, duration: 0.5, ease: 'power2.out' }
-  );
-
-  /* ───── Active nav link highlighting (via GSAP ticker) ───── */
-  const sections = document.querySelectorAll('section, footer');
-  const navLinks = document.querySelectorAll('.nav-link');
 
   const updateActiveNav = () => {
-    let current = '';
+    const marker = window.scrollY + 180;
+    let current = sections[0]?.id || 'home';
+
     sections.forEach((section) => {
-      const top = section.offsetTop - 150;
-      if (window.scrollY >= top) {
-        current = section.getAttribute('id');
-      }
+      if (marker >= section.offsetTop) current = section.id;
     });
+
     navLinks.forEach((link) => {
-      link.classList.toggle('active', link.getAttribute('href') === `#${current}`);
+      const active = link.getAttribute('href') === `#${current}`;
+      link.classList.toggle('active', active);
+      if (active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
     });
   };
 
-  gsap.ticker.add(updateActiveNav);
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (ticking) return;
+    window.requestAnimationFrame(() => {
+      updateActiveNav();
+      ticking = false;
+    });
+    ticking = true;
+  }, { passive: true });
   updateActiveNav();
 
-  /* ───── Hero section — animate on load ───── */
-  const heroTl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+  /* Lazy Vimeo lightbox. Links remain valid Vimeo links without JavaScript. */
+  const modal = document.getElementById('video-modal');
+  const modalFrame = document.getElementById('video-modal-frame');
+  const modalTitle = document.getElementById('video-modal-title');
+  const closeButton = modal?.querySelector('[data-close-modal]');
+  let activeTrigger = null;
 
-  heroTl
-    .fromTo(
-      '.hero-title',
-      { autoAlpha: 0, scale: 0.8 },
-      { autoAlpha: 1, scale: 1, duration: 0.8 }
-    )
-    .fromTo(
-      '.hero-subtitle',
-      { autoAlpha: 0, y: 20 },
-      { autoAlpha: 1, y: 0, duration: 0.6 },
-      '-=0.3'
-    );
+  const closeVideo = () => {
+    if (!modal?.open) return;
+    modal.close();
+  };
 
-  /* ───── About section — scroll-triggered ───── */
-  const aboutTl = gsap.timeline({
-    scrollTrigger: {
-      trigger: '.about',
-      start: 'top 80%',
-      toggleActions: 'play none none none',
-    },
-    defaults: { ease: 'power2.out' },
-  });
+  if (modal && modalFrame && modalTitle && typeof modal.showModal === 'function') {
+    document.querySelectorAll('.video-trigger').forEach((trigger) => {
+      trigger.addEventListener('click', (event) => {
+        const videoId = trigger.dataset.vimeoId;
+        if (!videoId) return;
 
-  aboutTl
-    .fromTo(
-      '.about .section-heading',
-      { autoAlpha: 0, x: -60 },
-      { autoAlpha: 1, x: 0, duration: 0.7 }
-    )
-    .fromTo(
-      '.about-body',
-      { autoAlpha: 0, y: 30 },
-      { autoAlpha: 1, y: 0, duration: 0.6 },
-      '-=0.3'
-    )
-    .fromTo(
-      '.about-video',
-      { autoAlpha: 0, x: 60 },
-      { autoAlpha: 1, x: 0, duration: 0.7 },
-      '-=0.4'
-    );
+        event.preventDefault();
+        activeTrigger = trigger;
+        modalTitle.textContent = trigger.dataset.videoTitle || 'Luka Motion video';
+        modalFrame.innerHTML = `
+          <iframe
+            src="https://player.vimeo.com/video/${encodeURIComponent(videoId)}?autoplay=1&amp;dnt=1&amp;title=0&amp;byline=0&amp;portrait=0"
+            title="${modalTitle.textContent.replace(/["&<>]/g, '')}"
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin">
+          </iframe>`;
+        modal.showModal();
+        document.body.classList.add('modal-open');
+      });
+    });
 
-  /* ───── Work section — scroll-triggered ───── */
-  const workTl = gsap.timeline({
-    scrollTrigger: {
-      trigger: '.work',
-      start: 'top 80%',
-      toggleActions: 'play none none none',
-    },
-    defaults: { ease: 'power2.out' },
-  });
+    closeButton?.addEventListener('click', closeVideo);
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) closeVideo();
+    });
+    modal.addEventListener('close', () => {
+      modalFrame.replaceChildren();
+      document.body.classList.remove('modal-open');
+      activeTrigger?.focus();
+      activeTrigger = null;
+    });
+  }
 
-  workTl
-    .fromTo(
-      '.work .section-heading',
-      { autoAlpha: 0, y: 30 },
-      { autoAlpha: 1, y: 0, duration: 0.6 }
-    )
-    .fromTo(
-      '.work-subtitle',
-      { autoAlpha: 0, y: 20 },
-      { autoAlpha: 1, y: 0, duration: 0.4 },
-      '-=0.2'
-    );
+  document.getElementById('current-year').textContent = new Date().getFullYear();
 
-  // Work grid items — staggered
-  gsap.fromTo(
-    '.work-item',
-    { autoAlpha: 0, scale: 0.9 },
-    {
-      autoAlpha: 1,
-      scale: 1,
-      duration: 0.5,
+  /* Motion is enhancement only: the page is fully visible before this runs. */
+  if (animationToolsReady && !reducedMotion) {
+    const { gsap, ScrollTrigger } = window;
+    gsap.registerPlugin(ScrollTrigger);
+
+    const heroTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+    heroTimeline
+      .from('.nav', { autoAlpha: 0, y: -16, duration: 0.45 })
+      .from('.hero-eyebrow', { autoAlpha: 0, y: 12, duration: 0.45 }, '-=0.2')
+      .from('.hero-title', { autoAlpha: 0, scale: 0.9, duration: 0.75 }, '-=0.25')
+      .from('.hero-joke', { autoAlpha: 0, y: 10, duration: 0.4 }, '-=0.35')
+      .from('.hero-copy > *', { autoAlpha: 0, y: 22, duration: 0.55, stagger: 0.08 }, '-=0.15')
+      .from('.reel-card', { autoAlpha: 0, y: 28, scale: 0.98, duration: 0.65 }, '-=0.55');
+
+    gsap.utils.toArray('.about, .work-heading-row, .footer-main, .footer-details').forEach((element) => {
+      gsap.from(element, {
+        autoAlpha: 0,
+        y: 34,
+        duration: 0.7,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: element, start: 'top 88%', once: true },
+      });
+    });
+
+    gsap.from('.work-item', {
+      autoAlpha: 0,
+      y: 28,
+      duration: 0.62,
       ease: 'power2.out',
-      stagger: 0.1,
-      scrollTrigger: {
-        trigger: '.work-grid',
-        start: 'top 85%',
-        toggleActions: 'play none none none',
-      },
-    }
-  );
-
-  /* ───── Footer — scroll-triggered ───── */
-  const footerTl = gsap.timeline({
-    scrollTrigger: {
-      trigger: '.footer',
-      start: 'top 90%',
-      toggleActions: 'play none none none',
-    },
-    defaults: { ease: 'power2.out' },
-  });
-
-  footerTl
-    .fromTo(
-      '.footer-heading',
-      { autoAlpha: 0, y: 30 },
-      { autoAlpha: 1, y: 0, duration: 0.6 }
-    )
-    .fromTo(
-      '.footer-socials > *',
-      { autoAlpha: 0 },
-      { autoAlpha: 1, duration: 0.4, stagger: 0.1 },
-      '-=0.2'
-    );
-
-  /* ───── Vimeo auto-play/pause on scroll ───── */
-  const iframe = document.getElementById('vimeo-player');
-  if (iframe) {
-    const player = new Vimeo.Player(iframe);
-    const videoObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            player.play();
-          } else {
-            player.pause();
-          }
-        });
-      },
-      { threshold: 0.4 }
-    );
-    videoObserver.observe(iframe);
+      stagger: 0.08,
+      scrollTrigger: { trigger: '.work-grid', start: 'top 86%', once: true },
+    });
   }
 });
