@@ -422,6 +422,7 @@ a {
 .video-modal {
   width: min(1120px, calc(100vw - 40px));
   max-width: none;
+  margin: auto;
   padding: 0;
   color: var(--ink);
   background: #0b0b0b;
