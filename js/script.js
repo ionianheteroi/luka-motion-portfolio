@@ -82,7 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         event.preventDefault();
         activeTrigger = trigger;
-        modalTitle.textContent = trigger.dataset.videoTitle || 'Luka Motion video';
+        const visibleTitle = trigger.querySelector('.work-title')?.textContent.trim();
+        modalTitle.textContent = visibleTitle || trigger.dataset.videoTitle || 'Luka Motion video';
         modalFrame.innerHTML = `
           <iframe
             src="https://player.vimeo.com/video/${encodeURIComponent(videoId)}?autoplay=1&amp;dnt=1&amp;title=0&amp;byline=0&amp;portrait=0"
